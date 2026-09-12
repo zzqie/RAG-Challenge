@@ -1,157 +1,46 @@
-# Enterprise Financial Document Intelligence Platform
+# 金融年报 RAG 问答系统
 
-This repository can be understood as an enterprise-grade financial document intelligence platform built on top of a high-performance RAG pipeline. Its current implementation focuses on annual reports, but the same architecture fits broader business scenarios such as:
+本项目基于 RAG Challenge 开源项目进行二次开发与工程化扩展，原项目地址：
 
-- group finance and strategy teams comparing multiple entities and periods
-- buy-side and sell-side research workflows
-- bank credit review and counterparty due diligence
-- IR, ESG, compliance, and audit support
-- knowledge extraction from regulated filings and long-form PDF documents
+[https://github.com/IlyaRice/RAG-Challenge-2/tree/main](https://github.com/IlyaRice/RAG-Challenge-2/tree/main)
 
-At its core, the system combines:
+项目面向金融年报 PDF 的结构化理解、检索增强问答与跨公司指标比较。整体流程以 Docling 为基础，构建了从 PDF 解析到问答服务的端到端流水线，可用于年报、财报、ESG 报告等长文档场景下的证据型问答。
 
-- custom PDF parsing with Docling
-- page reconstruction and markdown normalization
-- chunk-level vector retrieval
-- optional table serialization for better structured evidence recall
-- LLM reranking for context refinement
-- structured answer generation with page-level traceability
-- multi-entity comparison and conversational memory extensions
+## 主要工作
 
-## Origin
+- 基于 Docling 构建金融年报 PDF 理解流水线，完成 OCR、版面解析、表格结构化与页级文本重构。
+- 通过缺页占位保持文本序列与物理页码一致，支持结构化问答、证据页码回溯及跨公司指标比较。
+- 设计实体路由与报告级 RAG 检索架构，为不同年报独立构建 FAISS 索引，提升多公司、多报告场景下的检索隔离性与可扩展性。
+- 结合父文档召回与 LLM 重排序生成证据上下文，提高答案生成时的上下文质量与可解释性。
+- 基于 FastAPI、Redis 和 Streamlit 扩展异步多轮问答服务，实现任务队列、会话状态隔离、历史记忆与前端交互。
+- 在评测流程中将得分由 `101.3` 提升至 `120.7`。
 
-The project originated from a winning solution in the RAG Challenge competition and was later extended toward a service-oriented financial QA workflow.
+## 系统结构
 
-Read more about the original background:
-- Russian: https://habr.com/ru/articles/893356/
-- English: https://abdullin.com/ilya/how-to-build-best-rag/
+离线知识构建流程主要包括 PDF 解析、表格序列化、页级 Markdown 重构、文本切块与 FAISS 向量索引构建。相关代码集中在 `src/pipeline.py`、`src/pdf_parsing.py`、`src/tables_serialization.py` 与 `src/retrieval.py`。
 
-## Business Framing
+在线问答流程包括实体识别、报告路由、候选证据召回、LLM 重排序与结构化答案生成。相关代码集中在 `src/questions_processing.py`、`src/routing.py`、`src/reranking.py`、`src/api_requests.py` 与 `src/prompts.py`。
 
-Although the current code stores one vector index per report/company file, that design can be interpreted in enterprise terms as a document-sharded retrieval architecture rather than a literal "one-company-one-system" design.
+服务化部分提供同步和异步两套使用方式：
 
-This is often useful in real business environments because it provides:
+- `api_single.py` / `app_single.py`：同步 API 与 Streamlit 单轮交互。
+- `api.py` / `worker.py` / `app.py`：基于 Redis 队列的异步问答服务。
 
-- natural document and entity isolation
-- easier incremental updates when a new filing arrives
-- stronger explainability and source attribution
-- better control over tenant, entity, or report-scope retrieval
-- a straightforward path toward portfolio-level routing before retrieval
-
-In other words, the current implementation already maps well to a multi-entity filing intelligence platform, especially when positioned as:
-
-- report-level knowledge shards
-- metadata-driven routing across entities, periods, and document types
-- evidence-grounded answering over regulated documents
-
-For a Chinese business-oriented packaging and architecture narrative, see [BUSINESS_PACKAGING_CN.md](BUSINESS_PACKAGING_CN.md).
-
-## Current System Layers
-
-### 1. Offline Knowledge Construction
-
-The pipeline in `src/` builds retrieval-ready knowledge assets from PDF filings:
-
-1. parse PDFs
-2. optionally serialize tables with LLMs
-3. normalize page content into retrieval-friendly markdown/text
-4. split pages into chunks
-5. build FAISS vector databases
-
-Main orchestrator: `src/pipeline.py`
-
-### 2. Online Question Answering
-
-The question answering layer:
-
-- identifies target entities from the question
-- retrieves relevant chunks or pages
-- optionally reranks them with an LLM
-- generates structured answers with references
-- supports comparative reasoning across multiple companies
-
-Core modules:
-
-- `src/questions_processing.py`
-- `src/retrieval.py`
-- `src/reranking.py`
-- `src/api_requests.py`
-- `src/prompts.py`
-
-### 3. Service Layer Extensions
-
-The repository also includes a lightweight service-oriented wrapper for interactive use:
-
-- `api_single.py` / `app_single.py`: synchronous API + Streamlit flow
-- `api.py` / `worker.py` / `app.py`: Redis queue based asynchronous flow
-
-This layer adds:
-
-- session history
-- structured memory extraction
-- cross-entity comparison shortcuts
-- UI-facing task orchestration
-
-## Quick Start
+## 快速开始
 
 ```bash
-git clone https://github.com/IlyaRice/RAG-Challenge-2.git
-cd RAG-Challenge-2
+git clone https://github.com/zzqie/RAG-Challenge.git
+cd RAG-Challenge
 python -m venv venv
 venv\Scripts\Activate.ps1
 pip install -e . -r requirements.txt
 ```
 
-Rename `env` to `.env` and add your API keys.
+将 `env` 重命名为 `.env`，并根据需要配置模型或 API Key。
 
-## Datasets
+## 数据与评测
 
-The repository includes:
-
-1. `data/test_set/` - a small local dataset with reports, metadata, processed assets, and sample outputs
-2. `data/erc2_set/` - the larger competition dataset description and answer files
-
-These datasets are useful not only for reproducing the original evaluation setup, but also for demonstrating a realistic filing-intelligence workflow end to end.
-
-## Usage
-
-Run the CLI help:
-
-```bash
-python main.py --help
-```
-
-Available commands:
-
-- `download-models`
-- `parse-pdfs`
-- `serialize-tables`
-- `process-reports`
-- `process-questions`
-
-Example:
-
-```bash
-cd .\data\test_set\
-python ..\..\main.py process-questions --config max_nst_o3m
-```
-
-You can also run individual stages directly from `src/pipeline.py` by uncommenting the desired method.
-
-## Recommended Positioning of Existing Configs
-
-- `max_nst_o3m`: balanced high-accuracy filing QA configuration
-- `max_st_o3m`: stronger table-aware configuration
-- `gemini_thinking`: large-context document reading baseline
-
-See `src/pipeline.py` for the full list of run configurations.
-
-## Practical Caveats
-
-- IBM Watson integration is historical and may not work in a new environment
-- the project is strong technically but still research/prototype flavored in engineering style
-- tests and production hardening are limited
-- PDF parsing benefits significantly from GPU resources
+仓库中保留了 RAG Challenge 的测试数据、PDF 报告、解析结果、向量库与多轮实验输出，便于复现检索、问答和评分流程。`round2/` 目录包含第二轮评测相关答案与排名文件。
 
 ## License
 
