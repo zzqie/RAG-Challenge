@@ -58,7 +58,7 @@ class RunConfig:
     submission_file: bool = True
     full_context: bool = False
     api_provider: str = "openai"
-    answering_model: str = "gpt-4o-mini-2024-07-18" #or "gpt-4o-2024-08-06"
+    answering_model: str = "gpt-4o-2024-08-06" #or "gpt-4o-2024-08-06"
     config_suffix: str = ""
 
 class Pipeline:
@@ -323,9 +323,9 @@ max_no_ser_tab_config = RunConfig(
 
 max_nst_o3m_config = RunConfig(
     use_serialized_tables=False,
-    parent_document_retrieval=True,
+    parent_document_retrieval=False,
     llm_reranking=True,
-    parallel_requests=25,
+    parallel_requests=5,
     submission_name="Ilia Ris v.4",
     pipeline_details="Custom pdf parsing + vDB + Router + Parent Document Retrieval + reranking + SO CoT; llm = o3-mini",
     answering_model="o3-mini-2025-01-31",

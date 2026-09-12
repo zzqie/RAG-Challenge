@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import os
 import numpy as np
 from src.reranking import LLMReranker
+from src.document_registry import DocumentRegistry
 
 _log = logging.getLogger(__name__)
 
@@ -81,13 +82,19 @@ class VectorRetriever:
     def __init__(self, vector_db_dir: Path, documents_dir: Path):
         self.vector_db_dir = vector_db_dir
         self.documents_dir = documents_dir
+        self.registry = DocumentRegistry.from_directories(
+            documents_dir=self.documents_dir,
+            vector_db_dir=self.vector_db_dir
+        )
         self.all_dbs = self._load_dbs()
+        self.reports_by_id = {report["report_id"]: report for report in self.all_dbs}
         self.llm = self._set_up_llm()
 
     def _set_up_llm(self):
         load_dotenv()
         llm = OpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
+            base_url="https://api.chatanywhere.tech",
             timeout=None,
             max_retries=2
             )
@@ -98,6 +105,7 @@ class VectorRetriever:
         load_dotenv()
         llm = OpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
+            base_url="https://api.chatanywhere.tech",
             timeout=None,
             max_retries=2
             )
@@ -133,6 +141,7 @@ class VectorRetriever:
                 continue
                 
             report = {
+                "report_id": stem,
                 "name": stem,
                 "vector_db": vector_db,
                 "document": document
@@ -150,23 +159,21 @@ class VectorRetriever:
         similarity_score = round(similarity_score, 4)
         return similarity_score
 
-    def retrieve_by_company_name(self, company_name: str, query: str, llm_reranking_sample_size: int = None, top_n: int = 3, return_parent_pages: bool = False) -> List[Tuple[str, float]]:
-        target_report = None
-        for report in self.all_dbs:
-            document = report.get("document", {})
-            metainfo = document.get("metainfo")
-            if not metainfo:
-                _log.error(f"Report '{report.get('name')}' is missing 'metainfo'!")
-                raise ValueError(f"Report '{report.get('name')}' is missing 'metainfo'!")
-            if metainfo.get("company_name") == company_name:
-                target_report = report
-                break
-        
+    def retrieve_by_report_id(
+        self,
+        report_id: str,
+        query: str,
+        llm_reranking_sample_size: int = None,
+        top_n: int = 3,
+        return_parent_pages: bool = False
+    ) -> List[Dict]:
+        target_report = self.reports_by_id.get(report_id)
         if target_report is None:
-            _log.error(f"No report found with '{company_name}' company name.")
-            raise ValueError(f"No report found with '{company_name}' company name.")
-        
+            _log.error(f"No report shard found with report_id '{report_id}'.")
+            raise ValueError(f"No report shard found with report_id '{report_id}'.")
+
         document = target_report["document"]
+        metainfo = document.get("metainfo", {})
         vector_db = target_report["vector_db"]
         chunks = document["content"]["chunks"]
         pages = document["content"]["pages"]
@@ -194,18 +201,59 @@ class VectorRetriever:
                     result = {
                         "distance": distance,
                         "page": parent_page["page"],
-                        "text": parent_page["text"]
+                        "text": parent_page["text"],
+                        "report_id": report_id,
+                        "pdf_sha1": metainfo.get("sha1_name", report_id),
+                        "company_name": metainfo.get("company_name", "")
                     }
                     retrieval_results.append(result)
             else:
                 result = {
                     "distance": distance,
                     "page": chunk["page"],
-                    "text": chunk["text"]
+                    "text": chunk["text"],
+                    "report_id": report_id,
+                    "pdf_sha1": metainfo.get("sha1_name", report_id),
+                    "company_name": metainfo.get("company_name", "")
                 }
                 retrieval_results.append(result)
             
         return retrieval_results
+
+    def retrieve_by_report_ids(
+        self,
+        report_ids: List[str],
+        query: str,
+        llm_reranking_sample_size: int = None,
+        top_n: int = 3,
+        return_parent_pages: bool = False
+    ) -> List[Dict]:
+        retrieval_results = []
+        per_report_top_n = llm_reranking_sample_size or top_n
+
+        for report_id in report_ids:
+            retrieval_results.extend(
+                self.retrieve_by_report_id(
+                    report_id=report_id,
+                    query=query,
+                    llm_reranking_sample_size=llm_reranking_sample_size,
+                    top_n=per_report_top_n,
+                    return_parent_pages=return_parent_pages
+                )
+            )
+
+        retrieval_results.sort(key=lambda item: item["distance"], reverse=True)
+        return retrieval_results[:top_n]
+
+    def retrieve_by_company_name(self, company_name: str, query: str, llm_reranking_sample_size: int = None, top_n: int = 3, return_parent_pages: bool = False) -> List[Dict]:
+        shard = self.registry.resolve_report(company_name)
+        return self.retrieve_by_report_id(
+            report_id=shard.report_id,
+            query=query,
+            llm_reranking_sample_size=llm_reranking_sample_size,
+            top_n=top_n,
+            return_parent_pages=return_parent_pages
+        )
 
     def retrieve_all(self, company_name: str) -> List[Dict]:
         target_report = None
@@ -241,6 +289,59 @@ class HybridRetriever:
     def __init__(self, vector_db_dir: Path, documents_dir: Path):
         self.vector_retriever = VectorRetriever(vector_db_dir, documents_dir)
         self.reranker = LLMReranker()
+
+    def retrieve_by_report_id(
+        self,
+        report_id: str,
+        query: str,
+        llm_reranking_sample_size: int = 28,
+        documents_batch_size: int = 2,
+        top_n: int = 6,
+        llm_weight: float = 0.7,
+        return_parent_pages: bool = False
+    ) -> List[Dict]:
+        vector_results = self.vector_retriever.retrieve_by_report_id(
+            report_id=report_id,
+            query=query,
+            top_n=llm_reranking_sample_size,
+            return_parent_pages=return_parent_pages
+        )
+
+        reranked_results = self.reranker.rerank_documents(
+            query=query,
+            documents=vector_results,
+            documents_batch_size=documents_batch_size,
+            llm_weight=llm_weight
+        )
+
+        return reranked_results[:top_n]
+
+    def retrieve_by_report_ids(
+        self,
+        report_ids: List[str],
+        query: str,
+        llm_reranking_sample_size: int = 28,
+        documents_batch_size: int = 2,
+        top_n: int = 6,
+        llm_weight: float = 0.7,
+        return_parent_pages: bool = False
+    ) -> List[Dict]:
+        vector_results = self.vector_retriever.retrieve_by_report_ids(
+            report_ids=report_ids,
+            query=query,
+            llm_reranking_sample_size=llm_reranking_sample_size,
+            top_n=llm_reranking_sample_size,
+            return_parent_pages=return_parent_pages
+        )
+
+        reranked_results = self.reranker.rerank_documents(
+            query=query,
+            documents=vector_results,
+            documents_batch_size=documents_batch_size,
+            llm_weight=llm_weight
+        )
+
+        return reranked_results[:top_n]
         
     def retrieve_by_company_name(
         self, 
@@ -267,20 +368,13 @@ class HybridRetriever:
         Returns:
             List of reranked document dictionaries with scores
         """
-        # Get initial results from vector retriever
-        vector_results = self.vector_retriever.retrieve_by_company_name(
-            company_name=company_name,
+        shard = self.vector_retriever.registry.resolve_report(company_name)
+        return self.retrieve_by_report_id(
+            report_id=shard.report_id,
             query=query,
-            top_n=llm_reranking_sample_size,
+            llm_reranking_sample_size=llm_reranking_sample_size,
+            documents_batch_size=documents_batch_size,
+            top_n=top_n,
+            llm_weight=llm_weight,
             return_parent_pages=return_parent_pages
         )
-        
-        # Rerank results using LLM
-        reranked_results = self.reranker.rerank_documents(
-            query=query,
-            documents=vector_results,
-            documents_batch_size=documents_batch_size,
-            llm_weight=llm_weight
-        )
-        
-        return reranked_results[:top_n]

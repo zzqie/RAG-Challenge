@@ -3,6 +3,8 @@ from typing import Union, Dict, List, Optional
 import re
 from pathlib import Path
 from src.retrieval import VectorRetriever, HybridRetriever
+from src.routing import ReportShardRouter
+from src.document_registry import DocumentShard
 from src.api_requests import APIProcessor
 from tqdm import tqdm
 import pandas as pd
@@ -24,13 +26,14 @@ class QuestionsProcessor:
         top_n_retrieval: int = 10,
         parallel_requests: int = 10,
         api_provider: str = "openai",
-        answering_model: str = "gpt-4o-2024-08-06",
+        answering_model: str = "gpt-4o-mini",#gpt-4o-2024-08-06
         full_context: bool = False
     ):
         self.questions = self._load_questions(questions_file_path)
         self.documents_dir = Path(documents_dir)
         self.vector_db_dir = Path(vector_db_dir)
         self.subset_path = Path(subset_path) if subset_path else None
+        self.report_router = None
         
         self.new_challenge_pipeline = new_challenge_pipeline
         self.return_parent_pages = parent_document_retrieval
@@ -47,6 +50,13 @@ class QuestionsProcessor:
         self.detail_counter = 0
         self._lock = threading.Lock()
 
+        if self.new_challenge_pipeline and self.subset_path is not None:
+            self.report_router = ReportShardRouter(
+                documents_dir=self.documents_dir,
+                vector_db_dir=self.vector_db_dir,
+                subset_path=self.subset_path
+            )
+
     def _load_questions(self, questions_file_path: Optional[Union[str, Path]]) -> List[Dict[str, str]]:
         if questions_file_path is None:
             return []
@@ -62,7 +72,11 @@ class QuestionsProcessor:
         for result in retrieval_results:
             page_number = result['page']
             text = result['text']
-            context_parts.append(f'Text retrieved from page {page_number}: \n"""\n{text}\n"""')
+            company_name = result.get("company_name")
+            report_id = result.get("report_id")
+            source = f" from {company_name}" if company_name else ""
+            report = f" report_id={report_id}" if report_id else ""
+            context_parts.append(f'Text retrieved{source}{report} from page {page_number}: \n"""\n{text}\n"""')
             
         return "\n\n---\n\n".join(context_parts)
 
@@ -82,6 +96,25 @@ class QuestionsProcessor:
         refs = []
         for page in pages_list:
             refs.append({"pdf_sha1": company_sha1, "page_index": page})
+        return refs
+
+    def _extract_references_from_retrieval(self, pages_list: list, retrieval_results: list) -> list:
+        refs = []
+        seen_refs = set()
+        page_set = set(pages_list or [])
+
+        for result in retrieval_results:
+            if result.get("page") not in page_set:
+                continue
+            pdf_sha1 = result.get("pdf_sha1")
+            if not pdf_sha1:
+                continue
+            key = (pdf_sha1, result["page"])
+            if key in seen_refs:
+                continue
+            seen_refs.add(key)
+            refs.append({"pdf_sha1": pdf_sha1, "page_index": result["page"]})
+
         return refs
 
     def _validate_page_references(self, claimed_pages: list, retrieval_results: list, min_pages: int = 2, max_pages: int = 8) -> list:
@@ -119,6 +152,41 @@ class QuestionsProcessor:
         return validated_pages
 
     def get_answer_for_company(self, company_name: str, question: str, schema: str) -> dict:
+        if self.report_router is not None:
+            shard = self.report_router.registry.resolve_report(company_name)
+            return self.get_answer_for_shards([shard], question, schema)
+
+        if self.llm_reranking:
+            retriever = HybridRetriever(
+                vector_db_dir=self.vector_db_dir,
+                documents_dir=self.documents_dir
+            )
+        else:
+            retriever = VectorRetriever(
+                vector_db_dir=self.vector_db_dir,
+                documents_dir=self.documents_dir
+            )
+
+        retrieval_results = (
+            retriever.retrieve_all(company_name)
+            if self.full_context
+            else retriever.retrieve_by_company_name(
+                company_name=company_name,
+                query=question,
+                llm_reranking_sample_size=self.llm_reranking_sample_size,
+                top_n=self.top_n_retrieval,
+                return_parent_pages=self.return_parent_pages
+            )
+        )
+
+        return self._answer_from_retrieval_results(
+            question=question,
+            schema=schema,
+            retrieval_results=retrieval_results,
+            fallback_company_name=company_name
+        )
+
+    def get_answer_for_shards(self, shards: List[DocumentShard], question: str, schema: str) -> dict:
 
         if self.llm_reranking:
             retriever = HybridRetriever(
@@ -132,16 +200,33 @@ class QuestionsProcessor:
             )
 
         if self.full_context:
-            retrieval_results = retriever.retrieve_all(company_name)
+            retrieval_results = []
+            for shard in shards:
+                retrieval_results.extend(retriever.retrieve_all(shard.company_name))
         else:           
-            retrieval_results = retriever.retrieve_by_company_name(
-                company_name=company_name,
+            retrieval_results = retriever.retrieve_by_report_ids(
+                report_ids=[shard.report_id for shard in shards],
                 query=question,
                 llm_reranking_sample_size=self.llm_reranking_sample_size,
                 top_n=self.top_n_retrieval,
                 return_parent_pages=self.return_parent_pages
             )
-        
+
+        fallback_company_name = shards[0].company_name if shards else ""
+        return self._answer_from_retrieval_results(
+            question=question,
+            schema=schema,
+            retrieval_results=retrieval_results,
+            fallback_company_name=fallback_company_name
+        )
+
+    def _answer_from_retrieval_results(
+        self,
+        question: str,
+        schema: str,
+        retrieval_results: list,
+        fallback_company_name: str
+    ) -> dict:
         if not retrieval_results:
             raise ValueError("No relevant context found")
         
@@ -157,11 +242,17 @@ class QuestionsProcessor:
             pages = answer_dict.get("relevant_pages", [])
             validated_pages = self._validate_page_references(pages, retrieval_results)
             answer_dict["relevant_pages"] = validated_pages
-            answer_dict["references"] = self._extract_references(validated_pages, company_name)
+            references = self._extract_references_from_retrieval(validated_pages, retrieval_results)
+            if not references:
+                references = self._extract_references(validated_pages, fallback_company_name)
+            answer_dict["references"] = references
         return answer_dict
 
     def _extract_companies_from_subset(self, question_text: str) -> list[str]:
         """Extract company names from a question by matching against companies in the subset file."""
+        if self.report_router is not None:
+            return self.report_router.extract_companies(question_text)
+
         if not hasattr(self, 'companies_df'):
             if self.subset_path is None:
                 raise ValueError("subset_path must be provided to use subset extraction")
@@ -182,6 +273,16 @@ class QuestionsProcessor:
         return found_companies
 
     def process_question(self, question: str, schema: str):
+        if self.new_challenge_pipeline and self.report_router is not None:
+            routed_shards = self.report_router.route_question(question)
+            routed_companies = sorted({shard.company_name for shard in routed_shards})
+
+            if len(routed_companies) == 1:
+                return self.get_answer_for_shards(routed_shards, question, schema)
+
+            if len(routed_companies) > 1:
+                return self.process_comparative_question_by_shards(question, routed_shards, schema)
+
         if self.new_challenge_pipeline:
             extracted_companies = self._extract_companies_from_subset(question)
         else:
@@ -449,6 +550,56 @@ class QuestionsProcessor:
             pipeline_details=pipeline_details
         )
         return result
+
+    def process_comparative_question_by_shards(self, question: str, shards: List[DocumentShard], schema: str) -> dict:
+        company_to_shards = {}
+        for shard in shards:
+            company_to_shards.setdefault(shard.company_name, []).append(shard)
+
+        companies = list(company_to_shards.keys())
+        rephrased_questions = self.openai_processor.get_rephrased_questions(
+            original_question=question,
+            companies=companies
+        )
+
+        individual_answers = {}
+        aggregated_references = []
+
+        def process_company_shards(company: str) -> tuple[str, dict]:
+            sub_question = rephrased_questions.get(company, question)
+            answer_dict = self.get_answer_for_shards(
+                shards=company_to_shards[company],
+                question=sub_question,
+                schema="number"
+            )
+            return company, answer_dict
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_to_company = {
+                executor.submit(process_company_shards, company): company
+                for company in companies
+            }
+
+            for future in concurrent.futures.as_completed(future_to_company):
+                company, answer_dict = future.result()
+                individual_answers[company] = answer_dict
+                aggregated_references.extend(answer_dict.get("references", []))
+
+        unique_refs = {}
+        for ref in aggregated_references:
+            key = (ref.get("pdf_sha1"), ref.get("page_index"))
+            unique_refs[key] = ref
+
+        comparative_answer = self.openai_processor.get_answer_from_rag_context(
+            question=question,
+            rag_context=individual_answers,
+            schema="comparative",
+            model=self.answering_model
+        )
+        self.response_data = self.openai_processor.response_data
+
+        comparative_answer["references"] = list(unique_refs.values())
+        return comparative_answer
 
     def process_comparative_question(self, question: str, companies: List[str], schema: str) -> dict:
         """

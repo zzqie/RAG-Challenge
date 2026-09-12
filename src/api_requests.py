@@ -20,13 +20,14 @@ from tenacity import retry, stop_after_attempt, wait_fixed
 class BaseOpenaiProcessor:
     def __init__(self):
         self.llm = self.set_up_llm()
-        self.default_model = 'gpt-4o-2024-08-06'
+        self.default_model = 'gpt-4o-mini'
         # self.default_model = 'gpt-4o-mini-2024-07-18',
 
     def set_up_llm(self):
         load_dotenv()
         llm = OpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
+            base_url="https://api.chatanywhere.tech",
             timeout=None,
             max_retries=2
             )

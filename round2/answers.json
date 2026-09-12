@@ -1,0 +1,115 @@
+{
+  "Did Mercia Asset Management PLC mention any mergers or acquisitions in the annual report?": {
+    "kind": "boolean",
+    "answers": [
+      "True"
+    ],
+    "reference_pools": [
+      [
+        "ac9aa244462c80705c3ff046542c02c459989742:82",
+        "ac9aa244462c80705c3ff046542c02c459989742:17"
+      ]
+    ]
+  },
+  "According to the annual report, what is the Operating margin (%) for Tradition (within the last period or at the end of the last period)? If data is not available, return 'N/A'.": {
+    "kind": "number",
+    "answers": [
+      "9.9"
+    ],
+    "reference_pools": [
+      [
+        "2779336b845a41544348abb7b3e6e5bd2ff893a2:44",
+        "2779336b845a41544348abb7b3e6e5bd2ff893a2:43"
+      ]
+    ]
+  },
+  "Did TSX_Y announce a share buyback plan in the annual report?": {
+    "kind": "boolean",
+    "answers": [
+      "True"
+    ],
+    "reference_pools": [
+      [
+        "9d7a72445aba6860402c3acce75af02dc045f74d:19",
+        "9d7a72445aba6860402c3acce75af02dc045f74d:67"
+      ]
+    ]
+  },
+  "What was the largest single spending of CrossFirst Bank on executive compensation in USD?": {
+    "kind": "name",
+    "answers": [
+      "N/A"
+    ],
+    "reference_pools": []
+  },
+  "Did Holley Inc. mention any mergers or acquisitions in the annual report?": {
+    "kind": "boolean",
+    "answers": [
+      "True"
+    ],
+    "reference_pools": [
+      [
+        "194000c9109c6fa628f1fed33b44ae4c2b8365f4:32",
+        "194000c9109c6fa628f1fed33b44ae4c2b8365f4:33",
+        "194000c9109c6fa628f1fed33b44ae4c2b8365f4:35",
+        "194000c9109c6fa628f1fed33b44ae4c2b8365f4:62"
+      ]
+    ]
+  },
+  "Did Holley Inc. announce a share buyback plan in the annual report?": {
+    "kind": "boolean",
+    "answers": [
+      "False"
+    ],
+    "reference_pools": [
+      [
+        "194000c9109c6fa628f1fed33b44ae4c2b8365f4:31",
+        "194000c9109c6fa628f1fed33b44ae4c2b8365f4:24"
+      ]
+    ]
+  },
+  "Which of the companies had the lowest total revenue in EUR at the end of the period listed in annual report: \"TSX_Y\", \"Mercia Asset Management PLC\"": {
+    "kind": "name",
+    "answers": [
+      "N/A"
+    ],
+    "reference_pools": []
+  },
+  "Did Tradition announce any new product launches in the annual report?": {
+    "kind": "boolean",
+    "answers": [
+      "False"
+    ],
+    "reference_pools": [
+      [
+        "2779336b845a41544348abb7b3e6e5bd2ff893a2:13",
+        "2779336b845a41544348abb7b3e6e5bd2ff893a2:14"
+      ]
+    ]
+  },
+  "According to the annual report, what is the Total revenue (in GBP) for Mercia Asset Management PLC": {
+    "kind": "number",
+    "answers": [
+      "23183000"
+    ],
+    "reference_pools": [
+      [
+        "ac9aa244462c80705c3ff046542c02c459989742:76",
+        "ac9aa244462c80705c3ff046542c02c459989742:72"
+      ]
+    ]
+  },
+  "Did CrossFirst Bank report any changes to its capital structure? If there is no mention, return False.": {
+    "kind": "boolean",
+    "answers": [
+      "False"
+    ],
+    "reference_pools": [
+      [
+        "e2b19d2cc2ccab2fd9022326b56b38fb0e772e73:2",
+        "e2b19d2cc2ccab2fd9022326b56b38fb0e772e73:10",
+        "e2b19d2cc2ccab2fd9022326b56b38fb0e772e73:37"
+      ]
+    ]
+  }
+}

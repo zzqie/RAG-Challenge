@@ -127,6 +127,9 @@ __pypackages__/
 celerybeat-schedule
 celerybeat.pid
 
+# Redis runtime persistence
+dump.rdb
+
 # SageMath parsed files
 *.sage.py
 

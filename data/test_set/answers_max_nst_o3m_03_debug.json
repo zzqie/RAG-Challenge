@@ -1,0 +1,49 @@
+{
+  "questions": [
+    {
+      "question_text": "What is the Operating profit margin (%) for Mercia Asset Management PLC?",
+      "kind": "number",
+      "value": "N/A",
+      "references": [
+        {
+          "pdf_sha1": "ac9aa244462c80705c3ff046542c02c459989742",
+          "page_index": 38
+        },
+        {
+          "pdf_sha1": "ac9aa244462c80705c3ff046542c02c459989742",
+          "page_index": 39
+        },
+        {
+          "pdf_sha1": "ac9aa244462c80705c3ff046542c02c459989742",
+          "page_index": 40
+        }
+      ],
+      "answer_details": {
+        "$ref": "#/answer_details/0"
+      }
+    }
+  ],
+  "answer_details": [
+    {
+      "step_by_step_analysis": "1. The question is asking for the operating profit margin (%) for Mercia Asset Management PLC, which would typically be calculated as operating profit divided by revenue, expressed in percentage. 2. I reviewed the provided pages from the annual report and looked for any explicit metric or calculation that stated the operating profit margin or operating profit percentage. 3. The pages contain information such as profit before taxation, adjusted operating profit definitions, and revenue figures, but no explicit value or calculation for operating profit margin is provided. 4. Although there are mentions of operating profit in the context of adjusted operating profit and performance measures, there is no direct mention of an operating profit margin percentage. 5. Without a specific reported value that exactly matches the concept of operating profit margin, the appropriate answer is ‘N/A’ as per the provided guidelines.",
+      "reasoning_summary": "The available report sections did not include a directly stated operating profit margin percentage, hence the answer is 'N/A'.",
+      "relevant_pages": [
+        38,
+        39,
+        40
+      ],
+      "response_data": {
+        "model": "o3-mini-2025-01-31",
+        "input_tokens": 3881,
+        "output_tokens": 818
+      },
+      "self": "#/answer_details/0"
+    }
+  ],
+  "statistics": {
+    "total_questions": 1,
+    "error_count": 0,
+    "na_count": 1,
+    "success_count": 0
+  }
+}

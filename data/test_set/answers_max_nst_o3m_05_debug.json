@@ -1,0 +1,44 @@
+{
+  "questions": [
+    {
+      "question_text": "What is the annual profit of Mercia Asset Management PLC?",
+      "kind": "number",
+      "value": -740000,
+      "references": [
+        {
+          "pdf_sha1": "ac9aa244462c80705c3ff046542c02c459989742",
+          "page_index": 107
+        },
+        {
+          "pdf_sha1": "ac9aa244462c80705c3ff046542c02c459989742",
+          "page_index": 3
+        }
+      ],
+      "answer_details": {
+        "$ref": "#/answer_details/0"
+      }
+    }
+  ],
+  "answer_details": [
+    {
+      "step_by_step_analysis": "1. Identified that the question asks for the 'annual profit' of Mercia Asset Management PLC. 2. Located the financial result in the context describing the Company's performance. 3. Found the statement on page 107 which clearly states: 'The Company's loss for the year was £740,000 (2021: profit of £1,879,000)'. 4. Recognized that since a loss is reported, the annual profit is negative. 5. Confirmed that no other page provides a different figure for Mercia Asset Management PLC’s annual profit, so the loss figure is the accurate answer.",
+      "reasoning_summary": "The annual profit was determined from page 107 where the Company reports a loss of £740,000, which is the direct measure of its annual profit (in this case negative).",
+      "relevant_pages": [
+        107,
+        3
+      ],
+      "response_data": {
+        "model": "o3-mini-2025-01-31",
+        "input_tokens": 4079,
+        "output_tokens": 1361
+      },
+      "self": "#/answer_details/0"
+    }
+  ],
+  "statistics": {
+    "total_questions": 1,
+    "error_count": 0,
+    "na_count": 0,
+    "success_count": 1
+  }
+}
